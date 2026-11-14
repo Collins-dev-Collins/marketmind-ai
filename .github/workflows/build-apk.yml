@@ -1,0 +1,63 @@
+
+name: Build MarketMind AI APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download repository files
+        uses: actions/checkout@v4
+
+      - name: Extract MarketMind AI source
+        run: |
+          unzip -o marketmind-ai-source.zip -d .
+          test -f marketmind-ai/package.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        working-directory: marketmind-ai
+        run: npm install
+
+      - name: Create Android project
+        working-directory: marketmind-ai
+        run: npx cap add android
+
+      - name: Sync Android project
+        working-directory: marketmind-ai
+        run: npx cap sync android
+
+      - name: Build APK
+        working-directory: marketmind-ai/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MarketMind-AI-Android-APK
+          path: marketmind-ai/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
