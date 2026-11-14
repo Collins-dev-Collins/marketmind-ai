@@ -76,9 +76,25 @@ class TwelveDataProvider:
                 response.raise_for_status()
                 payload = response.json()
 
-        except (httpx.HTTPError, ValueError) as exc:
+                except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code
+            detail = exc.response.text[:300]
+
+            if self.api_key:
+                detail = detail.replace(self.api_key, "[REDACTED]")
+
             raise ProviderUnavailable(
-                f"Twelve Data request failed: {type(exc).__name__}"
+                f"Twelve Data HTTP {status_code}: {detail}"
+            ) from exc
+
+        except httpx.RequestError as exc:
+            raise ProviderUnavailable(
+                f"Twelve Data network error: {type(exc).__name__}"
+            ) from exc
+
+        except ValueError as exc:
+            raise ProviderUnavailable(
+                "Twelve Data returned invalid JSON."
             ) from exc
 
         values = payload.get("values")
