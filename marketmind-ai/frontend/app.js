@@ -18,7 +18,46 @@ $('#theme-toggle').onclick=()=>{const d=document.documentElement;d.dataset.theme
 function persist(){localStorage.setItem('mm_watchlist',JSON.stringify(watchlist));renderWatchlist()}
 function renderWatchlist(){const count=$('#watchlist-count');if(count)count.textContent=`${watchlist.length} instrument${watchlist.length===1?'':'s'}`;const html=watchlist.map(s=>`<div class="result-metric"><b>${esc(s)}</b><span>Price unavailable until provider is configured</span><button class="text-btn" data-remove="${esc(s)}">Remove</button></div>`).join('');const empty='<div class="empty-state"><span class="empty-icon">☆</span><b>No saved instruments</b><p>Build a list of markets you want to follow.</p></div>';$('#watchlist-items').innerHTML=html||empty;$('#home-watchlist').innerHTML=watchlist.length?html:'<div class="empty-state"><span class="empty-icon">☆</span><b>Your watchlist is waiting</b><p>Search for a ticker or currency pair and add it to your list.</p><button class="outline-btn" data-goto="markets">Find an instrument</button></div>';$$('[data-remove]').forEach(b=>b.onclick=()=>{watchlist=watchlist.filter(s=>s!==b.dataset.remove);persist();toast('Removed from watchlist')});$$('#home-watchlist [data-goto]').forEach(b=>b.onclick=()=>goto('markets'))}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-async function addSymbol(s){s=s.trim().toUpperCase();if(!/^[A-Z0-9.^=_-]{1,24}$/.test(s)){toast('Enter a valid ticker or pair');return}let description='Symbol saved locally. Confirm the instrument and exchange before relying on it.';try{const r=await fetch(`${API}/api/search?q=${encodeURIComponent(s)}`);if(r.ok){const d=await r.json();description=d.matches?.[0]?.description||description}}catch{}if(!watchlist.includes(s)){watchlist.unshift(s);persist()}toast(`${s} added to your device watchlist`);$('#market-result').innerHTML=`<div class="result-metric"><b>${esc(s)}</b><span>${esc(description)}</span></div><div class="notice"><span>ⓘ</span><div><b>Historical quote data not connected</b><p>Connect a backend market-data provider to load real daily prices. Symbol lookup does not verify exchange listing.</p></div></div><button class="outline-btn" id="add-from-result">Saved to watchlist</button>`;$('#add-from-result').onclick=()=>toast(`${s} is already saved`);loadMarket(s)}
+
+async function addSymbol(s) {
+    s = s.trim().toUpperCase();
+
+    if (!/^[A-Z0-9.^=_-]{1,24}$/.test(s)) {
+        toast('Enter a valid ticker or pair');
+        return;
+    }
+
+    let description = 'Symbol saved locally. Confirm the instrument and exchange before relying on it.';
+
+    try {
+        const r = await fetch(`${API}/api/search?q=${encodeURIComponent(s)}`);
+
+        if (r.ok) {
+            const d = await r.json();
+            description = d.matches?.[0]?.description || description;
+        }
+    } catch {}
+
+    if (!watchlist.includes(s)) {
+        watchlist.unshift(s);
+        persist();
+    }
+
+    toast(`${s} added to your device watchlist`);
+
+    $('#market-result').innerHTML = `
+        <div class="result-metric">
+            <b>${esc(s)}</b>
+            <span>${esc(description)}</span>
+        </div>
+        <p class="muted small">Loading historical market data...</p>
+    `;
+
+    $('#add-from-result')?.remove();
+
+    loadMarket(s);
+}
+
 async function loadMarket(symbol){const box=$('#market-result');box.insertAdjacentHTML('beforeend','<p id="market-loading" class="muted small">Loading daily historical data…</p>');try{const r=await fetch(`${API}/api/market/${encodeURIComponent(symbol)}`);const d=await r.json();$('#market-loading')?.remove();if(!r.ok)throw Error(d.detail?.message||d.detail||'Historical data unavailable');renderMarketData(d)}catch(e){$('#market-loading')?.remove();box.insertAdjacentHTML('beforeend',`<div class="provider-error"><b>Backend or market data unavailable</b><p>${esc(e.message)} No price has been substituted. On a static PWA, watchlists and education work locally; live research needs a hosted backend.</p><button class="text-btn" data-goto="settings">Data settings ↗</button></div>`);$$('#market-result [data-goto]').forEach(b=>b.onclick=()=>goto('settings'))}}
 function renderMarketData(d){const c=d.candles||[];if(!c.length)return;const closes=c.map(x=>Number(x.close));const lo=Math.min(...closes),hi=Math.max(...closes),span=hi-lo||1;const pts=closes.map((v,i)=>`${(i/(closes.length-1||1))*720},${150-((v-lo)/span)*130}`).join(' ');const a=d.analysis||{};const fmt=v=>v==null?'Not enough history':Number(v).toFixed(3);const assess=(a.assessment||'insufficient_evidence').replaceAll('_',' ');const html=`<div class="data-head"><div><div class="eyebrow">${esc(d.provider)} · DAILY HISTORICAL</div><h2>${esc(d.symbol)}</h2><p class="muted small">Last available bar: ${esc(d.last_bar_date||'unknown')} · ${c.length} observations · end-of-day/historical, not live</p></div><div class="data-price">${Number(d.last_close).toLocaleString(undefined,{maximumFractionDigits:5})}<small>Latest daily close · ${esc(c[c.length-1].date)}</small></div></div><div class="chart-wrap"><svg viewBox="0 0 720 170" role="img" aria-label="Daily closing price history for ${esc(d.symbol)}"><line x1="0" y1="150" x2="720" y2="150" stroke="var(--line)"/><line x1="0" y1="85" x2="720" y2="85" stroke="var(--line)" stroke-dasharray="4 5"/><polyline points="${pts}" fill="none" stroke="#76a5ff" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></svg><div class="chart-labels"><span>${esc(c[0].date)}</span><span>${esc(c[c.length-1].date)}</span></div></div><div class="data-summary"><span class="status-pill neutral">${esc(d.status.replaceAll('_',' '))}</span><span class="status-pill neutral">Rule-based: ${esc(assess)}</span></div><div class="indicator-grid"><div><span>SMA 20</span><b>${fmt(a.sma20)}</b></div><div><span>SMA 50</span><b>${fmt(a.sma50)}</b></div><div><span>EMA 20</span><b>${fmt(a.ema20)}</b></div><div><span>RSI 14</span><b>${a.rsi14==null?'Not enough history':Number(a.rsi14).toFixed(1)}</b></div><div><span>ATR 14</span><b>${fmt(a.atr14)}</b></div><div><span>MACD histogram</span><b>${fmt(a.macd?.histogram)}</b></div></div><p class="muted small">${esc(a.method_note||'Indicator calculations are deterministic; this is not a calibrated probability or a trade instruction.')}</p>`;$('#market-result').innerHTML=html;$('#analysis-panel').className='panel';$('#analysis-panel').innerHTML=html;currentSymbol=d.symbol}
 $('#market-search-btn').onclick=()=>addSymbol($('#market-search').value);$('#market-search').addEventListener('keydown',e=>{if(e.key==='Enter')addSymbol(e.target.value)});$$('[data-symbol]').forEach(b=>b.onclick=()=>{$('#market-search').value=b.dataset.symbol;addSymbol(b.dataset.symbol)});
