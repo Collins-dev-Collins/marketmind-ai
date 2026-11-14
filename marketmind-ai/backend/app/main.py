@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from .indicators import analyze
-from .providers import AlphaVantageProvider, ProviderUnavailable
+from .providers import AlphaVantageProvider, TwelveDataProvider, ProviderUnavailable
 
 ROOT=Path(__file__).resolve().parents[2]
 DB=Path(os.getenv("MARKETMIND_DB",ROOT/"marketmind.sqlite3"))
