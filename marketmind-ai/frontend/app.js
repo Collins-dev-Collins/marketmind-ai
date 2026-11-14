@@ -1,5 +1,5 @@
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-const API=(window.MARKETMIND_API_BASE||'').replace(/\/$/,''); let currentSymbol=null; let watchlist=JSON.parse(localStorage.getItem('mm_watchlist')||'[]');
+const API=(window.MARKETMIND_API_BASE||'https://marketmind-ai-backend-8azb.onrender.com').replace(/\/$/,''); let currentSymbol=null; let watchlist=JSON.parse(localStorage.getItem('mm_watchlist')||'[]');
 const dateLabel=document.querySelector('.welcome-row .eyebrow'); if(dateLabel) dateLabel.textContent=new Intl.DateTimeFormat(undefined,{weekday:'long',year:'numeric',month:'long',day:'numeric'}).format(new Date()).toUpperCase();
 const topics=[
  {term:'RSI',simple:'The Relative Strength Index compares recent upward and downward price changes on a scale from 0 to 100.',advanced:'Wilder-smoothed relative strength: RSI = 100 − 100/(1 + RS), where RS is smoothed average gain divided by smoothed average loss.',use:'Some traders watch readings above 70 or below 30 as possible stretched conditions.',limit:'RSI can remain elevated or depressed during strong trends.'},
