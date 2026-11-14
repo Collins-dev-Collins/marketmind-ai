@@ -18,7 +18,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract MarketMind AI source
+      - name: Extract source
         run: |
           unzip -o MarketMind-AI-Source.zip -d .
           test -f marketmind-ai/package.json
@@ -43,22 +43,30 @@ jobs:
         working-directory: marketmind-ai
         run: npm install
 
-      - name: Check Android platform
+      - name: Add Android platform if missing
         working-directory: marketmind-ai
         run: |
-          if [ ! -d android ]; then
+          if [ ! -f android/app/build.gradle ] && [ ! -f android/app/build.gradle.kts ]; then
+            rm -rf android
             npx cap add android
           fi
 
-      - name: Synchronize Android project
+      - name: Synchronize Capacitor
         working-directory: marketmind-ai
         run: npx cap sync android
 
-      - name: Build APK
+      - name: Check Gradle wrapper
         working-directory: marketmind-ai/android
         run: |
+          if [ ! -f gradlew ]; then
+            gradle wrapper --gradle-version 8.13
+          fi
+          test -f gradlew
           chmod +x gradlew
-          ./gradlew assembleDebug
+
+      - name: Build APK
+        working-directory: marketmind-ai/android
+        run: ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
