@@ -20,7 +20,7 @@ jobs:
 
       - name: Extract MarketMind AI source
         run: |
-          unzip -o marketmind-ai-source.zip -d .
+          unzip -o MarketMind-AI-Source.zip -d .
           test -f marketmind-ai/package.json
 
       - name: Set up Node.js
