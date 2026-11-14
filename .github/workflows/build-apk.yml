@@ -22,7 +22,6 @@ jobs:
         run: |
           unzip -o MarketMind-AI-Source.zip -d .
           test -f marketmind-ai/package.json
-          test -f marketmind-ai/capacitor.config.json || test -f marketmind-ai/capacitor.config.ts
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -40,19 +39,22 @@ jobs:
         with:
           packages: 'platform-tools'
 
-      - name: Install project dependencies
+      - name: Install dependencies
         working-directory: marketmind-ai
         run: npm install
 
-      - name: Add Android platform
+      - name: Check Android platform
         working-directory: marketmind-ai
-        run: npx cap add android
+        run: |
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
 
       - name: Synchronize Android project
         working-directory: marketmind-ai
         run: npx cap sync android
 
-      - name: Build debug APK
+      - name: Build APK
         working-directory: marketmind-ai/android
         run: |
           chmod +x gradlew
