@@ -1,0 +1,12 @@
+.env
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.sqlite3
+node_modules/
+android/.gradle/
+android/build/
+android/app/build/
+.DS_Store

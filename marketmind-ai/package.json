@@ -1,0 +1,18 @@
+{
+  "name": "marketmind-ai",
+  "version": "0.2.0",
+  "private": true,
+  "description": "MarketMind AI mobile-first financial research MVP",
+  "scripts": {
+    "web": "python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000",
+    "android:add": "cap add android",
+    "android:sync": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3"
+  }
+}
