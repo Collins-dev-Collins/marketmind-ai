@@ -15,13 +15,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download repository files
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Extract MarketMind AI source
         run: |
           unzip -o MarketMind-AI-Source.zip -d .
           test -f marketmind-ai/package.json
+          test -f marketmind-ai/capacitor.config.json || test -f marketmind-ai/capacitor.config.ts
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -35,21 +36,23 @@ jobs:
           java-version: '21'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
 
-      - name: Install dependencies
+      - name: Install project dependencies
         working-directory: marketmind-ai
         run: npm install
 
-      - name: Create Android project
+      - name: Add Android platform
         working-directory: marketmind-ai
         run: npx cap add android
 
-      - name: Sync Android project
+      - name: Synchronize Android project
         working-directory: marketmind-ai
         run: npx cap sync android
 
-      - name: Build APK
+      - name: Build debug APK
         working-directory: marketmind-ai/android
         run: |
           chmod +x gradlew
@@ -61,3 +64,4 @@ jobs:
           name: MarketMind-AI-Android-APK
           path: marketmind-ai/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 14
