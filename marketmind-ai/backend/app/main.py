@@ -35,57 +35,70 @@ def db():
     """)
     con.commit()
     return con
+
 async def get_daily_history(symbol: str):
     symbol = symbol.upper()
-    con = db()
 
+    con = db()
     row = con.execute(
         "SELECT payload, cached_at FROM market_cache WHERE symbol=?",
         (symbol,)
     ).fetchone()
-
     con.close()
 
     now = time.time()
 
-    # Reuse successful data for 24 hours.
+    # Use fresh cached data for 24 hours.
     if row and now - row[1] < 86400:
         data = json.loads(row[0])
         data["cache_status"] = "cached"
         return data
 
-    # Fetch new data when the cache expires.
-    try:
-        data = await AlphaVantageProvider().daily(symbol)
+    errors = []
 
-    except ProviderUnavailable:
-        # If the provider is unavailable, use older saved data
-        # rather than making the app completely unusable.
-        if row:
-            data = json.loads(row[0])
-            data["cache_status"] = "stale_fallback"
-            data["cache_age_hours"] = round(
-                (now - row[1]) / 3600, 1
+    # Try Alpha Vantage first, then Twelve Data.
+    providers = [
+        AlphaVantageProvider(),
+        TwelveDataProvider(),
+    ]
+
+    for provider in providers:
+        try:
+            data = await provider.daily(symbol)
+
+            con = db()
+            con.execute(
+                """
+                INSERT OR REPLACE INTO market_cache
+                (symbol, payload, cached_at)
+                VALUES (?, ?, ?)
+                """,
+                (symbol, json.dumps(data), time.time())
             )
+            con.commit()
+            con.close()
+
+            data["cache_status"] = "provider"
             return data
 
-        raise
+        except ProviderUnavailable as exc:
+            errors.append(
+                f"{provider.__class__.__name__}: {str(exc)[:180]}"
+            )
 
-    # Save only successful provider responses.
-    con = db()
-    con.execute(
-        """
-        INSERT OR REPLACE INTO market_cache
-        (symbol, payload, cached_at)
-        VALUES (?, ?, ?)
-        """,
-        (symbol, json.dumps(data), now)
+    # If both providers fail, use older cached data if available.
+    if row:
+        data = json.loads(row[0])
+        data["cache_status"] = "stale_fallback"
+        data["cache_age_hours"] = round(
+            (now - row[1]) / 3600, 1
+        )
+        return data
+
+    raise ProviderUnavailable(
+        "All market-data providers failed. " + " | ".join(errors)
     )
-    con.commit()
-    con.close()
 
-    data["cache_status"] = "provider"
-    return data    
 
 @app.get("/api/health")
 def health(): return {"status":"ok","app":"MarketMind AI","market_data_configured":bool(os.getenv("ALPHA_VANTAGE_API_KEY")),"data_mode":"provider_required_for_real_quotes"}
