@@ -1,4 +1,4 @@
-const CACHE = 'marketmind-shell-v2';
+const CACHE = 'marketmind-shell-v3';
 const ASSETS = ['./', './styles.css', './app.js', './config.js', './manifest.webmanifest', './icon.svg'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
