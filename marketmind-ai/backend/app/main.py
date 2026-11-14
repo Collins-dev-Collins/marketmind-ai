@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, re, sqlite3
+import os, re, sqlite3, time, json
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,7 +19,73 @@ class WatchlistItem(BaseModel): symbol:str=Field(min_length=1,max_length=24)
 class ForexRisk(BaseModel): balance:float=Field(gt=0); risk_percent:float=Field(gt=0,le=100); entry:float=Field(gt=0); stop:float=Field(gt=0); pip_size:float=Field(gt=0); pip_value_per_lot:float=Field(gt=0); spread_pips:float=Field(ge=0); commission_per_lot:float=Field(ge=0)
 
 def db():
-    con=sqlite3.connect(DB); con.execute("CREATE TABLE IF NOT EXISTS watchlist(symbol TEXT PRIMARY KEY, added_at TEXT DEFAULT CURRENT_TIMESTAMP)"); return con
+    con = sqlite3.connect(DB)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS watchlist(
+            symbol TEXT PRIMARY KEY,
+            added_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS market_cache(
+            symbol TEXT PRIMARY KEY,
+            payload TEXT NOT NULL,
+            cached_at REAL NOT NULL
+        )
+    """)
+    con.commit()
+    return con
+async def get_daily_history(symbol: str):
+    symbol = symbol.upper()
+    con = db()
+
+    row = con.execute(
+        "SELECT payload, cached_at FROM market_cache WHERE symbol=?",
+        (symbol,)
+    ).fetchone()
+
+    con.close()
+
+    now = time.time()
+
+    # Reuse successful data for 24 hours.
+    if row and now - row[1] < 86400:
+        data = json.loads(row[0])
+        data["cache_status"] = "cached"
+        return data
+
+    # Fetch new data when the cache expires.
+    try:
+        data = await AlphaVantageProvider().daily(symbol)
+
+    except ProviderUnavailable:
+        # If the provider is unavailable, use older saved data
+        # rather than making the app completely unusable.
+        if row:
+            data = json.loads(row[0])
+            data["cache_status"] = "stale_fallback"
+            data["cache_age_hours"] = round(
+                (now - row[1]) / 3600, 1
+            )
+            return data
+
+        raise
+
+    # Save only successful provider responses.
+    con = db()
+    con.execute(
+        """
+        INSERT OR REPLACE INTO market_cache
+        (symbol, payload, cached_at)
+        VALUES (?, ?, ?)
+        """,
+        (symbol, json.dumps(data), now)
+    )
+    con.commit()
+    con.close()
+
+    data["cache_status"] = "provider"
+    return data    
 
 @app.get("/api/health")
 def health(): return {"status":"ok","app":"MarketMind AI","market_data_configured":bool(os.getenv("ALPHA_VANTAGE_API_KEY")),"data_mode":"provider_required_for_real_quotes"}
@@ -34,7 +100,7 @@ def search(q:str):
 @app.get("/api/market/{symbol}")
 async def market(symbol:str):
     if not re.fullmatch(r"[A-Za-z0-9.^=_-]{1,24}",symbol): raise HTTPException(400,"Invalid symbol")
-    try: data=await AlphaVantageProvider().daily(symbol.upper())
+    try: data=await get_daily_history(symbol.upper())
     except ProviderUnavailable as e: raise HTTPException(503,detail={"status":"unavailable","message":str(e),"data_status":"unavailable"})
     data["analysis"]=analyze([x["close"] for x in data["candles"]],[x["high"] for x in data["candles"]],[x["low"] for x in data["candles"]])
     data["last_close"]=data["candles"][-1]["close"] if data["candles"] else None
@@ -157,7 +223,7 @@ async def fundamentals(ticker:str):
 @app.post('/api/backtest/{symbol}')
 async def backtest(symbol:str, cfg:BacktestRequest):
     if cfg.fast_period>=cfg.slow_period: raise HTTPException(400,'fast_period must be less than slow_period')
-    try: d=await AlphaVantageProvider().daily(symbol.upper())
+    try: d=await get_daily_history(symbol.upper())
     except ProviderUnavailable as exc: raise HTTPException(503,detail={'status':'unavailable','message':str(exc)})
     bars=d['candles']; closes=[float(x['close']) for x in bars]
     if len(closes)<cfg.slow_period+2: raise HTTPException(422,'Insufficient daily history for requested moving-average periods.')
